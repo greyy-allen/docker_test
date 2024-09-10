@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-nginx-kanban-proxy-rev
+  namespace: default
+immutable: true
+data:
+  nginx.conf: |
+    worker_processes 1;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        sendfile on;
+        large_client_header_buffers 4 32k;
+        upstream kanban-frontend {
+            server kanban-app-client-7623group9:3000;
+        }
+
+        upstream kanban-backend {
+            server kanban-app-server-7623group9:5000;
+        }
+
+        upstream mongo-express {
+            server kanban-obs-mongoexpress-7623group9:8081;
+        }
+
+        server {
+            listen 80;
+            server_name localhost;
+
+            location / {
+                return 301 https://$host$request_uri;
+            }
+        }
+
+        server {
+            listen 443 ssl;
+            server_name localhost;
+
+            ssl_certificate /etc/ssl/certs/tls.crt;
+            ssl_certificate_key /etc/ssl/private/tls.key;
+
+            location / {
+                proxy_pass              http://kanban-frontend;
+                proxy_redirect          off;
+                proxy_http_version      1.1;
+                proxy_cache_bypass      $http_upgrade;
+                proxy_set_header        Upgrade $http_upgrade;
+                proxy_set_header        Connection keep-alive;
+                proxy_set_header        Host $host;
+                proxy_set_header        X-Real-IP $remote_addr;
+                proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header        X-Forwarded-Proto $scheme;
+                proxy_set_header        X-Forwarded-Host $server_name;
+                proxy_buffer_size       128k;
+                proxy_buffers           4 128k;
+                proxy_busy_buffers_size 256k;
+            }
+
+            location ~* /api {
+                proxy_pass              http://kanban-backend;
+                proxy_redirect          off;
+                proxy_http_version      1.1;
+                proxy_cache_bypass      $http_upgrade;
+                proxy_set_header        Upgrade $http_upgrade;
+                proxy_set_header        Connection keep-alive;
+                proxy_set_header        Host $host;
+                proxy_set_header        X-Real-IP $remote_addr;
+                proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header        X-Forwarded-Proto $scheme;
+                proxy_set_header        X-Forwarded-Host $server_name;
+                proxy_buffer_size       128k;
+                proxy_buffers           4 128k;
+                proxy_busy_buffers_size 256k;
+            }
+        }
+
+        server {
+            listen 8081 ssl;
+            server_name localhost;
+            
+            error_page 497 301 =307 https://$server_name:$server_port$request_uri;
+
+            ssl_certificate /etc/ssl/certs/tls.crt;
+            ssl_certificate_key /etc/ssl/private/tls.key;
+
+            location / {
+                proxy_pass              http://mongo-express;
+                proxy_redirect          off;
+                proxy_http_version      1.1;
+                proxy_cache_bypass      $http_upgrade;
+                proxy_set_header        Upgrade $http_upgrade;
+                proxy_set_header        Connection keep-alive;
+                proxy_set_header        Host $host;
+                proxy_set_header        X-Real-IP $remote_addr;
+                proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header        X-Forwarded-Proto $scheme;
+                proxy_set_header        X-Forwarded-Host $server_name;
+                proxy_buffer_size       128k;
+                proxy_buffers           4 128k;
+                proxy_busy_buffers_size 256k;
+            }
+        }
+    }
+---

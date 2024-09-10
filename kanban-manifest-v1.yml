@@ -1,0 +1,208 @@
+# Workloads = Deployments + Services
+# https://kubernetes.io/docs/concepts/workloads/management/
+# 2x pods deployed grouping similar services/service types in this config (pod01 - 2 svcs, pod02 - 3 svcs)
+# Consider better scale out/up possible with 1x pod per service in future iteration (5 pods, 1 service each like compose)
+# Build images before applying manifest 
+#   - manifest is the combination of the individual pod/deployment etc YML files in the /kanban-minikube-v1/ dir
+# Port forwarding/minikube tunneling required in AWS to enable ingress of external traffic (same as lab exercises)
+
+### Workload POD01 Gateway(nginx) + Web App Frontend (REVERSE PROXY + FRONTEND)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanban-webapp
+  labels:
+    app: kanban-webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kanban-webapp
+  template:
+    metadata:
+      labels:
+        app: kanban-webapp
+    spec:
+      containers:
+        - name: kanban-proxy-rev-7623group9
+          image: nginx:latest
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: /etc/ssl
+            readOnly: true
+          - name: nginx-config
+            mountPath: /etc/nginx
+            readOnly: true
+          ports:
+          - containerPort: 80
+          - containerPort: 443
+          - containerPort: 8081
+        - name: kanban-app-client-7623group9
+          image: gu-7623ict-g9/kanban-app-client-7623group9:v2
+          imagePullPolicy: Never
+          ports:
+          - containerPort: 3000
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: kanban-proxy-rev-tls
+          items:
+            - key: tls.crt
+              path: certs/tls.crt
+            - key: tls.key
+              path: private/tls.key
+          optional: false
+      - name: nginx-config
+        configMap:
+          name: config-nginx-kanban-proxy-rev
+
+---
+### Workload POD02 Backend Server/Data Services (BACKEND + DATABASE + DBMS)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanban-webservices
+  labels:
+    app: kanban-webservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kanban-webservices
+  template:
+    metadata:
+      labels:
+        app: kanban-webservices
+    spec:
+      containers:
+        - name: kanban-app-server-7623group9
+          image: gu-7623ict-g9/kanban-app-server-7623group9:v2
+          imagePullPolicy: Never
+          env:
+          - name: PORT
+            value: "5000"
+          - name: MONGODB_URL
+            value: mongodb://kanban-data-mongodb-7623group9:27017
+          - name: PASSWORD_SECRET_KEY
+            value: asdkljlkwa238947239842
+          - name: TOKEN_SECRET_KEY
+            value: kaasdkjaksldu89236r7824t62
+          ports:
+          - containerPort: 5000
+        - name: kanban-data-mongodb-7623group9
+          image: mongo:latest
+          volumeMounts:
+          - name: mongodata
+            mountPath: /data/db
+          ports:
+          - containerPort: 27017
+        - name: kanban-obs-mongoexpress-7623group9
+          image: mongo-express:latest
+          env:
+          - name: ME_CONFIG_MONGODB_URL
+            value: mongodb://kanban-data-mongodb-7623group9:27017
+          - name: ME_CONFIG_BASICAUTH_USERNAME
+            value: g9admin
+          - name: ME_CONFIG_BASICAUTH_PASSWORD
+            value: gugotime1234
+          ports:
+          - containerPort: 8081
+      volumes:
+      - name: mongodata
+        emptyDir:
+          sizeLimit: 2Gi
+
+---
+### Kanban K8s Services
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kanban-proxy-rev-7623group9
+spec:
+  #type: NodePort
+  type: LoadBalancer
+  selector:
+    app: kanban-webapp
+  ports:
+    - name: kanban-proxy-rev-7623group9-port-tcp-http
+      protocol: TCP
+      port: 80 ## Services can route with their own ports (this could be another number) port-forward/tunnel uses this + targetPort
+      targetPort: 80 ## Match targetPort to Pod/Container Port
+      nodePort: 32001 ## Connection to cluster for use with ingress/LB - external PROD traffic ideally eventually comes through here (remember node is the server/VM/instance)
+    - name: kanban-proxy-rev-7623group9-port-tcp-https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+      nodePort: 32002
+    - name: kanban-proxy-rev-7623group9-port-redirect-https-monex
+      protocol: TCP
+      port: 8081
+      targetPort: 8081
+      nodePort: 32333
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kanban-app-client-7623group9
+spec:
+  #type: NodePort
+  #type: LoadBalancer
+  selector:
+    app: kanban-webapp
+  ports:
+    - name: kanban-webapp-port-tcp-http
+      protocol: TCP
+      port: 3000
+      targetPort: 3000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kanban-app-server-7623group9
+spec:
+  #type: NodePort
+  #type: LoadBalancer
+  selector:
+    app: kanban-webservices
+  ports:
+    - name: kanban-app-server-7623group9-port-tcp-http
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kanban-data-mongodb-7623group9
+spec:
+  #type: NodePort
+  #type: LoadBalancer
+  selector:
+    app: kanban-webservices
+  ports:
+    - name: kanban-data-mongodb-7623group9-port-tcp-http
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kanban-obs-mongoexpress-7623group9
+spec:
+  #type: NodePort
+  #type: LoadBalancer
+  selector:
+    app: kanban-webservices
+  ports:
+    - name: kanban-obs-mongoexpress-7623group9-port-tcp-http
+      protocol: TCP
+      port: 8081
+      targetPort: 8081

@@ -1,0 +1,55 @@
+### POD02 Backend Server/Data Services (BACKEND + DATABASE + DBMS)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanban-webservices
+  labels:
+    app: kanban-webservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kanban-webservices
+  template:
+    metadata:
+      labels:
+        app: kanban-webservices
+    spec:
+      containers:
+        - name: kanban-app-server-7623group9
+          image: gu-7623ict-g9/kanban-app-server-7623group9:v2
+          imagePullPolicy: Never
+          env:
+          - name: PORT
+            value: "5000"
+          - name: MONGODB_URL
+            value: mongodb://kanban-data-mongodb-7623group9:27017
+          - name: PASSWORD_SECRET_KEY
+            value: asdkljlkwa238947239842
+          - name: TOKEN_SECRET_KEY
+            value: kaasdkjaksldu89236r7824t62
+          ports:
+          - containerPort: 5000
+        - name: kanban-data-mongodb-7623group9
+          image: mongo:latest
+          volumeMounts:
+          - name: mongodata
+            mountPath: /data/db
+          ports:
+          - containerPort: 27017
+        - name: kanban-obs-mongoexpress-7623group9
+          image: mongo-express:latest
+          env:
+          - name: ME_CONFIG_MONGODB_URL
+            value: mongodb://kanban-data-mongodb-7623group9:27017
+          - name: ME_CONFIG_BASICAUTH_USERNAME
+            value: g9admin
+          - name: ME_CONFIG_BASICAUTH_PASSWORD
+            value: gugotime1234
+          ports:
+          - containerPort: 8081
+      volumes:
+      - name: mongodata
+        emptyDir:
+          sizeLimit: 2Gi

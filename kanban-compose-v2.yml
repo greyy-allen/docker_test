@@ -1,0 +1,95 @@
+# Docker compose for "fullstack-kanban-app" web application
+# Developer has used 3 tier architecture - project contains front-end/back-end and interfaces with a Mongo NoSQL database
+# This compose file builds 5 containers:
+#   - Separate client and server into containers with custom local build stages
+#   - nginx reverse proxy custom image with local build stage
+#     - requires local ssl cert for testing
+#     - requires nginx.conf configuration
+#   - Mongo database, standard from Docker Hub registry
+#   - Mongo express "DBMS", standard from Docker Hub registry
+
+services:
+  kanban-proxy-rev-7623group9:
+    container_name: kanban-proxy-rev-7623group9
+    image: nginx:latest
+    depends_on:
+      - kanban-app-client-7623group9
+      - kanban-app-server-7623group9
+      - kanban-data-mongodb-7623group9
+      - kanban-obs-mongoexpress-7623group9
+    volumes: # Compose allows binding single files, skip container build for proxy in v2
+      - type: bind
+        source: ./kanban-compose-v2/secrets/kanban-rpx-nginx_nginx.conf
+        target: /etc/nginx/nginx.conf
+      - type: bind
+        source: ./kanban-compose-v2/secrets/ssl/localhost/localhost.crt
+        target: /etc/ssl/certs/localhost.crt
+      - type: bind
+        source: ./kanban-compose-v2/secrets/ssl/localhost/localhost.key
+        target: /etc/ssl/private/localhost.key
+    ports:
+      - "80:80/tcp" # Nginx HTTPS redirect when config working correctly
+      - "443:443/tcp" # Map to Kanban app client 3000 in nginx config
+      - "8081:8081/tcp" # Map 8081 externally to Mongo Express app 8081 in nginx config
+    networks:
+      - proxy
+
+  kanban-app-client-7623group9:
+    container_name: kanban-app-client-7623group9
+    image: gu-7623ict-g9/kanban-app-client-7623group9:v2
+    build: # Compose file in top level directory, build paths relative
+      context: ./fullstack-kanban-app/client
+      dockerfile: ../../kanban-compose-v2/builds/kanban-app-client-7623group9.Dockerfile
+      args: # args insert env vars into Dockerfiles for use during "docker build" steps
+        - REACT_APP_AWS_IPV4=${AWS_IPV4} # Uses AWS_IPV4 EC2 environment variable, Docker build will output warning if missing
+    depends_on:
+      - kanban-app-server-7623group9
+      - kanban-data-mongodb-7623group9
+    networks:
+      - proxy
+
+  kanban-app-server-7623group9:
+    container_name: kanban-app-server-7623group9
+    image: gu-7623ict-g9/kanban-app-server-7623group9:v2
+    build:
+      context: ./fullstack-kanban-app/server
+      dockerfile: ../../kanban-compose-v2/builds/kanban-app-server-7623group9.Dockerfile
+    environment:
+      - PORT=5000
+      - MONGODB_URL=mongodb://kanban-data-mongodb-7623group9:27017
+      - PASSWORD_SECRET_KEY=asdkljlkwa238947239842 ## TODO: Check dev youtube for default secrets -> security fix is probably to use /dev/urandom and generate random EC2 env to pass in like with the IPV4 address
+      - TOKEN_SECRET_KEY=kaasdkjaksldu89236r7824t62 ## $(dd if=/dev/urandom count=1 bs=128 | sha512sum)
+    depends_on:
+      - kanban-data-mongodb-7623group9
+    networks:
+      - proxy
+      - data
+
+  kanban-data-mongodb-7623group9:
+    container_name: kanban-data-mongodb-7623group9
+    image: mongo:latest
+    volumes:
+      - mongodata:/data/db
+    networks:
+      - data
+ 
+  kanban-obs-mongoexpress-7623group9:
+    container_name: kanban-obs-mongoexpress-7623group9
+    image: mongo-express:latest
+    depends_on:
+      - kanban-data-mongodb-7623group9
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://kanban-data-mongodb-7623group9:27017
+      - ME_CONFIG_BASICAUTH_USERNAME=g9admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=gutest1234
+    networks:
+      - proxy
+      - data
+
+volumes:
+  mongodata:
+
+networks:
+  proxy:
+  data:
+    internal: true

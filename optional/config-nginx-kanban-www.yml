@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-nginx-kanban-www
+  namespace: default
+data:
+  app.conf: |
+    server {
+
+      listen 80;
+      server_name localhost;
+
+      root /usr/share/nginx/html;
+
+      location ~* \.(?:css|js|map|jpe?g|gif|png)$ {
+      }
+
+      location / {
+          index  index.html index.htm;
+          try_files $uri $uri/ /index.html?path=$uri&$args;
+      }
+
+      error_page  500 502 503 504  /50x.html;
+
+    }
+---

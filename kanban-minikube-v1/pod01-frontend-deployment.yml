@@ -1,0 +1,50 @@
+### POD01 Gateway(nginx) + Web App Frontend (REVERSE PROXY + FRONTEND)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanban-webapp
+  labels:
+    app: kanban-webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kanban-webapp
+  template:
+    metadata:
+      labels:
+        app: kanban-webapp
+    spec:
+      containers:
+        - name: kanban-proxy-rev-7623group9
+          image: nginx:latest
+          volumeMounts:
+          - name: nginx-tls
+            mountPath: /etc/ssl
+            readOnly: true
+          - name: nginx-config
+            mountPath: /etc/nginx
+            readOnly: true
+          ports:
+          - containerPort: 80
+          - containerPort: 443
+          - containerPort: 8081
+        - name: kanban-app-client-7623group9
+          image: gu-7623ict-g9/kanban-app-client-7623group9:v2
+          imagePullPolicy: Never
+          ports:
+          - containerPort: 3000
+      volumes:
+      - name: nginx-tls
+        secret:
+          secretName: kanban-proxy-rev-tls
+          items:
+            - key: tls.crt
+              path: certs/tls.crt
+            - key: tls.key
+              path: private/tls.key
+          optional: false
+      - name: nginx-config
+        configMap:
+          name: config-nginx-kanban-proxy-rev
